@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>RunGam — 달려서 그리는 그림 퀘스트</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --blue:#3182F6;
+    --blue-dark:#1B64DA;
+    --blue-light:#E8F3FF;
+    --bg:#F2F4F6;
+    --card:#FFFFFF;
+    --text:#191F28;
+    --sub:#8B95A1;
+    --line:#E5E8EB;
+    --green:#00C471;
+    --orange:#FF8A00;
+    --red:#F04452;
+    --yellow:#FFC342;
+    --neon:#EFFF3B;
+    --neon-glow:rgba(239,255,59,.75);
+    --dark:#14171C;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    font-family:'Pretendard',-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",Roboto,sans-serif;
+    background:#DDE3EA;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--text);
+  }
+  button{font-family:inherit;border:none;cursor:pointer;background:none;}
+
+  .phone{
+    width:100%;max-width:420px;height:100dvh;max-height:920px;
+    background:var(--bg);position:relative;overflow:hidden;
+  }
+  @media(min-width:440px){
+    .phone{border-radius:28px;box-shadow:0 24px 80px rgba(25,31,40,.25);height:92dvh;}
+  }
+
+  /* ===== screens ===== */
+  .screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);
+    transition:transform .35s cubic-bezier(.32,.72,.25,1),opacity .3s;}
+  .screen.hidden{transform:translateX(100%);opacity:0;pointer-events:none;}
+  #screen-home.hidden{transform:translateX(-18%);opacity:.5;}
+
+  /* ===== home ===== */
+  .home-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 20px 14px;background:rgba(242,244,246,.92);backdrop-filter:blur(10px);
+    position:sticky;top:0;z-index:5;
+  }
+  .logo{font-size:20px;font-weight:800;letter-spacing:-.5px;display:flex;align-items:center;gap:6px;}
+  .logo .dot{color:var(--blue);}
+  .badges{display:flex;gap:8px;}
+  .badge{
+    display:flex;align-items:center;gap:4px;background:var(--card);
+    padding:6px 10px;border-radius:20px;font-size:13px;font-weight:700;
+    box-shadow:0 1px 4px rgba(25,31,40,.06);
+  }
+  .badge .k{color:var(--sub);font-weight:600;}
+  .home-scroll{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;}
+  .home-scroll::-webkit-scrollbar{display:none;}
+
+  .season-banner{
+    margin:12px 20px 4px;background:linear-gradient(135deg,#3182F6,#5AA2FF);
+    border-radius:20px;padding:18px 20px;color:#fff;position:relative;overflow:hidden;
+  }
+  .season-banner h2{font-size:17px;font-weight:800;letter-spacing:-.3px;}
+  .season-banner p{font-size:13px;opacity:.85;margin-top:4px;font-weight:500;}
+
+  .map-wrap{position:relative;margin:8px 0 30px;}
+  .map-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+
+  .node{
+    position:absolute;transform:translate(-50%,-50%);
+    display:flex;flex-direction:column;align-items:center;gap:5px;width:120px;
+  }
+  .node-btn{
+    width:66px;height:66px;border-radius:50%;font-size:30px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--card);
+    box-shadow:0 4px 0 var(--line),0 6px 14px rgba(25,31,40,.08);
+    transition:transform .15s;position:relative;
+  }
+  .node-btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--line);}
+  .node.cleared .node-btn{background:var(--blue-light);box-shadow:0 4px 0 #BBD8FF,0 6px 14px rgba(49,130,246,.15);}
+  .node.locked .node-btn{background:#EAEDF0;box-shadow:0 4px 0 #DADDE0;font-size:22px;filter:grayscale(1);opacity:.75;}
+  .node.current .node-btn{
+    background:var(--blue);box-shadow:0 4px 0 var(--blue-dark),0 8px 20px rgba(49,130,246,.4);
+  }
+  .node.current .node-btn::after{
+    content:'';position:absolute;inset:-8px;border-radius:50%;
+    border:3px solid rgba(49,130,246,.4);animation:pulse 1.6s infinite;
+  }
+  @keyframes pulse{
+    0%{transform:scale(.9);opacity:1;}
+    70%{transform:scale(1.15);opacity:0;}
+    100%{opacity:0;}
+  }
+  .start-bubble{
+    position:absolute;top:-38px;left:50%;transform:translateX(-50%);
+    background:var(--text);color:#fff;font-size:12px;font-weight:800;
+    padding:6px 12px;border-radius:12px;white-space:nowrap;
+    animation:bob 1.4s ease-in-out infinite;
+  }
+  .start-bubble::after{
+    content:'';position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);
+    border:6px solid transparent;border-top-color:var(--text);border-bottom:none;
+  }
+  @keyframes bob{0%,100%{transform:translate(-50%,0);}50%{transform:translate(-50%,-5px);}}
+  .node-name{font-size:13px;font-weight:700;color:var(--text);}
+  .node-area{font-size:11px;font-weight:600;color:var(--sub);}
+  .node.locked .node-name{color:var(--sub);}
+  .node-stars{font-size:11px;letter-spacing:1px;height:13px;color:var(--yellow);}
+  .node-stars .off{opacity:.22;}
+  .node.current .node-btn.legend{background:var(--orange);box-shadow:0 4px 0 #C96D00,0 8px 20px rgba(255,138,0,.4);}
+  .node.current .node-btn.legend::after{border-color:rgba(255,138,0,.45);}
+  .node.cleared .node-btn.legend{background:#FFF3DB;box-shadow:0 4px 0 #FFD79A,0 6px 14px rgba(255,138,0,.18);}
+
+  .section-head{
+    position:absolute;left:0;right:0;transform:translateY(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;
+  }
+  .section-head .chip{
+    background:var(--text);color:var(--yellow);font-size:13px;font-weight:800;
+    padding:7px 14px;border-radius:20px;letter-spacing:-.2px;
+  }
+  .section-head .sub{font-size:11px;font-weight:600;color:var(--sub);}
+
+  .shake{animation:shake .4s;}
+  @keyframes shake{0%,100%{transform:translate(-50%,-50%);}25%{transform:translate(calc(-50% - 5px),-50%);}75%{transform:translate(calc(-50% + 5px),-50%);}}
+
+  /* ===== bottom sheet ===== */
+  .dim{position:absolute;inset:0;background:rgba(25,31,40,.45);opacity:0;pointer-events:none;transition:opacity .3s;z-index:500;}
+  .dim.show{opacity:1;pointer-events:auto;}
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;background:var(--card);
+    border-radius:24px 24px 0 0;padding:12px 24px calc(24px + env(safe-area-inset-bottom));
+    transform:translateY(105%);transition:transform .38s cubic-bezier(.32,.72,.25,1);z-index:501;
+  }
+  .sheet.show{transform:translateY(0);}
+  .sheet-handle{width:40px;height:4px;background:var(--line);border-radius:2px;margin:0 auto 16px;}
+  .sheet-top{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
+  .sheet-emoji{
+    width:58px;height:58px;border-radius:18px;background:var(--blue-light);
+    display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;
+  }
+  .sheet-title{font-size:19px;font-weight:800;letter-spacing:-.3px;}
+  .sheet-sub{font-size:13px;color:var(--sub);margin-top:3px;font-weight:500;}
+  .sheet-loc{
+    display:inline-flex;align-items:center;gap:5px;background:var(--blue-light);color:var(--blue-dark);
+    font-size:12px;font-weight:700;padding:5px 10px;border-radius:14px;margin-bottom:12px;
+  }
+  .sheet-real{
+    display:inline-flex;align-items:center;gap:5px;background:#FFF3DB;color:#B26A00;
+    font-size:12px;font-weight:700;padding:5px 10px;border-radius:14px;margin:0 0 12px 6px;
+  }
+  .shape-preview{
+    background:var(--dark);border-radius:18px;padding:10px 10px 8px;margin-bottom:14px;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+  }
+  .shape-preview svg{width:120px;height:120px;}
+  .shape-legend{display:flex;gap:12px;font-size:10px;font-weight:600;color:#8B95A1;}
+  .shape-legend i{display:inline-block;width:12px;height:0;vertical-align:middle;margin-right:4px;
+    border-top:2px solid currentColor;}
+  .shape-legend .real{color:var(--neon);}
+  #sheet-path{filter:drop-shadow(0 0 4px var(--neon-glow));}
+  #sheet-route{filter:drop-shadow(0 0 4px var(--neon-glow));}
+  .sheet-info{display:flex;gap:6px;margin-bottom:8px;}
+  .sheet-quality{font-size:11px;color:var(--sub);font-weight:600;text-align:center;margin-bottom:14px;min-height:14px;}
+  .info-chip{
+    flex:1;background:var(--bg);border-radius:14px;padding:10px 4px;text-align:center;
+  }
+  .info-chip .k{font-size:11px;color:var(--sub);font-weight:600;}
+  .info-chip .v{font-size:15px;font-weight:800;margin-top:3px;letter-spacing:-.3px;}
+  .btn-primary{
+    width:100%;background:var(--blue);color:#fff;font-size:16px;font-weight:800;
+    padding:16px;border-radius:16px;letter-spacing:-.3px;transition:transform .12s,background .15s;
+  }
+  .btn-primary:active{transform:scale(.97);background:var(--blue-dark);}
+  .btn-primary:disabled{background:#C6D3E1;cursor:default;transform:none;}
+  .btn-ghost{
+    width:100%;background:var(--bg);color:var(--sub);font-size:15px;font-weight:700;
+    padding:14px;border-radius:16px;margin-top:8px;
+  }
+
+  /* ===== run screen ===== */
+  .run-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 10px;}
+  .run-title{font-size:16px;font-weight:800;letter-spacing:-.3px;display:flex;flex-direction:column;align-items:center;line-height:1.3;}
+  .run-title small{font-size:11px;font-weight:600;color:var(--sub);}
+  .icon-btn{
+    width:36px;height:36px;border-radius:50%;background:var(--card);font-size:15px;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(25,31,40,.08);
+    color:var(--sub);font-weight:700;
+  }
+  .run-map-wrap{margin:4px 16px;background:var(--card);border-radius:24px;padding:8px;
+    box-shadow:0 2px 12px rgba(25,31,40,.06);
+    flex:1;min-height:200px;display:flex;}
+  #leaflet-map{width:100%;height:100%;border-radius:18px;background:var(--dark);}
+  .leaflet-container{font-family:inherit;}
+  .runner-pin{
+    width:34px;height:34px;border-radius:50%;background:var(--dark);
+    border:3px solid var(--neon);display:flex;align-items:center;justify-content:center;
+    font-size:17px;box-shadow:0 0 12px var(--neon-glow),0 3px 10px rgba(0,0,0,.4);
+    animation:runBob .5s ease-in-out infinite alternate;
+  }
+  @keyframes runBob{from{transform:translateY(0);}to{transform:translateY(-2px);}}
+  .run-msg{
+    text-align:center;font-size:14px;font-weight:700;color:var(--blue);
+    padding:8px 0 0;letter-spacing:-.2px;min-height:28px;
+  }
+  .run-stats{display:flex;gap:8px;margin:6px 16px;}
+  .stat-card{flex:1;background:var(--card);border-radius:16px;padding:11px 8px;text-align:center;
+    box-shadow:0 1px 6px rgba(25,31,40,.05);}
+  .stat-card .k{font-size:11px;color:var(--sub);font-weight:600;}
+  .stat-card .v{font-size:18px;font-weight:800;margin-top:3px;letter-spacing:-.5px;font-variant-numeric:tabular-nums;}
+  .progress-wrap{margin:4px 16px;}
+  .progress-track{height:13px;background:var(--line);border-radius:7px;overflow:hidden;}
+  .progress-fill{
+    height:100%;width:0%;border-radius:7px;
+    background:linear-gradient(90deg,var(--blue),#5AA2FF);
+    transition:width .25s linear;
+  }
+  .progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);font-weight:600;margin-top:5px;}
+  .run-controls{margin:6px 16px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;padding-top:6px;}
+  .speed-row{display:flex;align-items:center;justify-content:center;gap:8px;}
+  .speed-label{font-size:12px;color:var(--sub);font-weight:600;}
+  .speed-btn{
+    padding:6px 13px;border-radius:20px;background:var(--card);font-size:13px;font-weight:700;color:var(--sub);
+    box-shadow:0 1px 4px rgba(25,31,40,.06);
+  }
+  .speed-btn.on{background:var(--text);color:#fff;}
+  .btn-pause{
+    width:100%;background:var(--card);color:var(--text);font-size:15px;font-weight:800;
+    padding:14px;border-radius:16px;box-shadow:0 2px 10px rgba(25,31,40,.08);
+  }
+  .btn-pause:active{transform:scale(.97);}
+
+  /* ===== result ===== */
+  #screen-result{background:linear-gradient(180deg,#EAF3FF 0%,var(--bg) 40%);}
+  .result-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:30px 24px 32px;text-align:center;}
+  .result-emoji{font-size:60px;animation:popIn .5s cubic-bezier(.34,1.56,.64,1);}
+  @keyframes popIn{0%{transform:scale(0);}100%{transform:scale(1);}}
+  .result-title{font-size:23px;font-weight:800;letter-spacing:-.5px;margin-top:10px;}
+  .result-sub{font-size:14px;color:var(--sub);font-weight:500;margin-top:5px;}
+  .result-stars{display:flex;gap:10px;margin:16px 0 2px;font-size:38px;color:var(--yellow);}
+  .result-stars span{opacity:.18;transform:scale(.6);display:inline-block;}
+  .result-stars span.lit{opacity:1;animation:starPop .45s cubic-bezier(.34,1.8,.64,1) forwards;}
+  @keyframes starPop{0%{transform:scale(.3) rotate(-30deg);}100%{transform:scale(1) rotate(0);}}
+  .result-shape{
+    background:var(--dark);border-radius:20px;padding:16px;margin-top:14px;
+    box-shadow:0 4px 16px rgba(25,31,40,.18);
+  }
+  .result-shape svg{width:120px;height:120px;display:block;}
+  #result-path{filter:drop-shadow(0 0 5px var(--neon-glow));}
+  .result-shape .cap{font-size:11px;color:var(--sub);font-weight:600;margin-top:8px;}
+  .result-stat-row{display:flex;gap:8px;margin-top:14px;width:100%;}
+  .result-actions{padding:0 24px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;}
+  .unlock-tag{
+    display:inline-flex;align-items:center;gap:6px;background:#E6F9F1;color:var(--green);
+    font-size:13px;font-weight:800;padding:8px 14px;border-radius:20px;margin-top:14px;
+  }
+
+  /* confetti */
+  .confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:600;}
+  .confetti i{
+    position:absolute;width:9px;height:14px;top:-20px;border-radius:2px;
+    animation:fall linear forwards;
+  }
+  @keyframes fall{
+    0%{transform:translateY(0) rotate(0);opacity:1;}
+    100%{transform:translateY(110vh) rotate(720deg);opacity:.6;}
+  }
+
+  /* toast */
+  .toast{
+    position:absolute;bottom:110px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:rgba(25,31,40,.9);color:#fff;font-size:14px;font-weight:600;
+    padding:12px 20px;border-radius:14px;opacity:0;transition:.3s;pointer-events:none;z-index:700;
+    white-space:nowrap;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+
+  <!-- ============ HOME ============ -->
+  <div class="screen" id="screen-home">
+    <div class="home-header">
+      <div class="logo">Run<span class="dot">Gam</span></div>
+      <div class="badges">
+        <div class="badge"><span class="k">연속</span> <span id="streak-val">0</span></div>
+        <div class="badge"><span class="k">별</span> <span id="stars-val">0</span></div>
+        <div class="badge"><span id="km-val">0</span>km</div>
+      </div>
+    </div>
+    <div class="home-scroll" id="home-scroll">
+      <div class="season-banner">
+        <h2 id="banner-title">수도권을 달리는 그림</h2>
+        <p id="banner-sub">공원·한강·신도시 격자길을 달려 도형을 완성하세요. 모든 코스는 실제 보행로예요!</p>
+      </div>
+      <div class="map-wrap" id="map-wrap">
+        <svg class="map-svg" id="map-svg" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RUN ============ -->
+  <div class="screen hidden" id="screen-run">
+    <div class="run-header">
+      <button class="icon-btn" id="btn-quit">✕</button>
+      <div class="run-title"><span id="run-title-main">🐱 고양이 그리기</span><small id="run-title-area">서울숲</small></div>
+      <div style="width:36px"></div>
+    </div>
+    <div class="run-map-wrap">
+      <div id="leaflet-map"></div>
+    </div>
+    <div class="run-msg" id="run-msg">출발!</div>
+    <div class="run-stats">
+      <div class="stat-card"><div class="k">시간</div><div class="v" id="stat-time">00:00</div></div>
+      <div class="stat-card"><div class="k">거리</div><div class="v" id="stat-dist">0.00<small style="font-size:12px">km</small></div></div>
+      <div class="stat-card"><div class="k">페이스</div><div class="v" id="stat-pace">-'--"</div></div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-label">
+        <span>그림 완성도</span><span id="progress-pct">0%</span>
+      </div>
+    </div>
+    <div class="run-controls">
+      <div class="speed-row">
+        <span class="speed-label">데모 배속</span>
+        <button class="speed-btn" data-speed="1">1×</button>
+        <button class="speed-btn" data-speed="8">8×</button>
+        <button class="speed-btn on" data-speed="32">32×</button>
+      </div>
+      <button class="btn-pause" id="btn-pause">일시정지</button>
+    </div>
+  </div>
+
+  <!-- ============ RESULT ============ -->
+  <div class="screen hidden" id="screen-result">
+    <div class="result-body">
+      <div class="result-emoji" id="result-emoji">🐱</div>
+      <div class="result-title" id="result-title">고양이 완성!</div>
+      <div class="result-sub" id="result-sub">달리면서 그림을 완성했어요</div>
+      <div class="result-stars" id="result-stars">
+        <span>★</span><span>★</span><span>★</span>
+      </div>
+      <div class="result-shape">
+        <svg id="result-svg" viewBox="0 0 100 100">
+          <path id="result-path" fill="none" stroke="var(--neon)" stroke-width="3"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="cap" id="result-cap">서울숲 · 실제 달린 경로</div>
+      </div>
+      <div class="result-stat-row">
+        <div class="stat-card"><div class="k">시간</div><div class="v" id="r-time">-</div></div>
+        <div class="stat-card"><div class="k">거리</div><div class="v" id="r-dist">-</div></div>
+        <div class="stat-card"><div class="k">페이스</div><div class="v" id="r-pace">-</div></div>
+        <div class="stat-card"><div class="k">정확도</div><div class="v" id="r-acc">-</div></div>
+      </div>
+      <div class="unlock-tag" id="unlock-tag" style="display:none">다음 스테이지가 열렸어요!</div>
+    </div>
+    <div class="result-actions">
+      <button class="btn-primary" id="btn-next">다음 레벨 도전 →</button>
+      <button class="btn-ghost" id="btn-home">홈으로</button>
+    </div>
+  </div>
+
+  <!-- ============ LEVEL SHEET ============ -->
+  <div class="dim" id="dim"></div>
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-top">
+      <div class="sheet-emoji" id="sheet-emoji">🐱</div>
+      <div>
+        <div class="sheet-title" id="sheet-title">Lv.5 고양이</div>
+        <div class="sheet-sub" id="sheet-desc">야옹! 뾰족한 귀가 포인트예요</div>
+      </div>
+    </div>
+    <div class="sheet-loc" id="sheet-loc">서울숲 · 서울 성동구</div>
+    <div class="sheet-real" id="sheet-real" style="display:none">역에서 도보</div>
+    <div class="shape-preview">
+      <svg id="sheet-svg" viewBox="0 0 100 100">
+        <path id="sheet-path" fill="none" stroke="var(--neon)" stroke-width="2.5"
+              stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path id="sheet-route" fill="none" stroke="var(--neon)" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <circle id="sheet-start-dot" r="3" fill="var(--neon)" stroke="#14171C" stroke-width="1.2"/>
+      </svg>
+      <div class="shape-legend" id="shape-legend" style="visibility:hidden">
+        <span><i></i>목표 도형</span><span class="real"><i></i>실제 달릴 길</span>
+      </div>
+    </div>
+    <div class="sheet-info">
+      <div class="info-chip"><div class="k">거리</div><div class="v" id="sheet-km">-</div></div>
+      <div class="info-chip"><div class="k">예상 시간</div><div class="v" id="sheet-time">-</div></div>
+      <div class="info-chip"><div class="k">난이도</div><div class="v" id="sheet-diff">●●●</div></div>
+      <div class="info-chip"><div class="k">도형 재현율</div><div class="v" id="sheet-fit">-</div></div>
+    </div>
+    <div class="sheet-quality" id="sheet-quality"></div>
+    <button class="btn-primary" id="btn-start">달리기 시작</button>
+    <button class="btn-ghost" id="btn-close-sheet">다음에 할게요</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="confetti" id="confetti"></div>
+</div>
+
+<script>
+/* ================= data ================= */
+/* ---- 도형: 0~100 좌표계, 한붓그리기 폐곡선 ----
+   도로와 산책로는 직선·직각으로 이루어져 있어서, 곡선 도형은 스냅되면
+   반드시 삐뚤어진다. 그래서 전부 축에 평행한 직선 + 최소한의 45° 사선으로
+   설계했고, 길이 없어 왕복이 생기는 좁은 홈(폭 12 미만)은 만들지 않았다.
+   아래 세 블록은 scratchpad/bake.mjs가 생성한다 — 직접 고치지 말 것. */
+/* <<GEN:SHAPES>> */
+const SHAPES = {
+  lightning: [[61.74,5],[24.57,55.87],[45.11,55.87],[33.37,95],[75.43,40.22],[53.91,40.22],[71.52,5],[61.74,5]],
+  tree: [[50,5],[69.57,32.39],[60.76,32.39],[77.39,57.83],[66.63,57.83],[85.22,83.26],[55.87,83.26],[55.87,95],[44.13,95],[44.13,83.26],[14.78,83.26],[33.37,57.83],[22.61,57.83],[39.24,32.39],[30.43,32.39],[50,5]],
+  buckethat: [[25.45,37.73],[37.73,23.41],[62.27,23.41],[74.55,37.73],[78.64,60.23],[95,60.23],[95,76.59],[5,76.59],[5,60.23],[21.36,60.23],[25.45,37.73]],
+  house: [[50,6.02],[72.5,26.48],[72.5,14.2],[82.73,14.2],[82.73,34.66],[95,44.89],[82.73,44.89],[82.73,93.98],[17.27,93.98],[17.27,44.89],[5,44.89],[50,6.02]],
+  cross: [[33.93,5],[66.07,5],[66.07,33.93],[95,33.93],[95,66.07],[66.07,66.07],[66.07,95],[33.93,95],[33.93,66.07],[5,66.07],[5,33.93],[33.93,33.93],[33.93,5]],
+  diamond: [[28.57,8.21],[71.43,8.21],[95,36.07],[50,91.79],[5,36.07],[28.57,8.21]],
+  fish: [[5,50],[18.7,32.39],[42.17,24.57],[65.65,28.48],[79.35,42.17],[95,22.61],[95,77.39],[79.35,57.83],[65.65,71.52],[42.17,75.43],[18.7,67.61],[5,50]],
+  whale: [[5,52],[8,42],[15,32],[27,24],[43,20],[59,23],[71,31],[78,42],[95,14],[86,50],[95,86],[78,58],[69,68],[55,76],[37,78],[21,73],[10,63],[5,52]],
+  chick: [[28.57,5],[52.14,7.14],[67.14,22.14],[69.29,35],[90.71,41.43],[69.29,50],[67.14,62.86],[56.43,75.71],[56.43,95],[45.71,95],[45.71,77.86],[37.14,77.86],[37.14,95],[26.43,95],[26.43,73.57],[13.57,58.57],[9.29,32.86],[15.71,15.71],[28.57,5]],
+  potato: [[5,57.13],[5.6,53.18],[6.89,48.66],[8.75,44.11],[11.21,38.51],[13.89,34.99],[17.16,31.75],[20.81,28.92],[25.69,25.06],[29.74,23.15],[34.17,21.71],[38.61,20.89],[44.31,19.89],[47.81,20.92],[50.98,23.03],[54.03,25.11],[58.79,26.1],[62.05,25.03],[65.31,22.74],[68.57,20.57],[73.28,19.89],[76.7,21.12],[80.25,23.54],[83.56,26.67],[87.76,30.24],[90.15,33.63],[92.19,37.52],[93.56,41.57],[95,46.79],[94.38,50.51],[92.74,54.26],[90.42,57.76],[87.76,62.3],[85.02,64.73],[81.77,66.69],[78.17,68.23],[73.28,70.58],[69.28,71.28],[64.92,71.42],[60.5,71.53],[54.66,72.65],[50.81,74.2],[47.13,76.3],[43.51,78.26],[38.1,79.89],[34.28,80.11],[30.4,79.7],[26.64,78.8],[21.55,77.82],[18.33,76.42],[15.29,74.59],[12.65,72.44],[9.14,69.55],[7.49,67.14],[6.32,64.5],[5.73,61.54],[5,57.13]],
+  star: [[50,7.2],[61.3,38.97],[95,39.9],[68.28,60.46],[77.81,92.8],[50,73.74],[22.19,92.8],[31.72,60.46],[5,39.9],[38.7,38.97],[50,7.2]],
+  cat: [[16.51,5],[43.72,28.02],[56.28,28.02],[83.49,5],[89.77,42.67],[93.95,61.51],[83.49,82.44],[62.56,95],[37.44,95],[16.51,82.44],[6.05,61.51],[10.23,42.67],[16.51,5]],
+  moon: [[83.74,89.07],[79.93,91.02],[75.95,92.6],[71.84,93.8],[67.63,94.6],[63.37,95],[59.09,94.99],[54.82,94.58],[50.62,93.76],[46.51,92.55],[42.54,90.95],[38.74,88.98],[35.14,86.66],[31.78,84.01],[28.68,81.06],[25.88,77.82],[23.4,74.33],[21.26,70.62],[19.48,66.72],[18.08,62.68],[17.08,58.52],[16.47,54.28],[16.26,50],[16.47,45.72],[17.08,41.48],[18.08,37.32],[19.48,33.28],[21.26,29.38],[23.4,25.67],[25.88,22.18],[28.68,18.94],[31.78,15.99],[35.14,13.34],[38.74,11.02],[42.54,9.05],[46.51,7.45],[50.62,6.24],[54.82,5.42],[59.09,5.01],[63.37,5],[67.63,5.4],[71.84,6.2],[75.95,7.4],[79.93,8.98],[83.74,10.93],[79.72,10.85],[75.71,11.17],[71.75,11.91],[67.9,13.05],[64.18,14.58],[60.63,16.48],[57.3,18.73],[54.22,21.32],[51.42,24.2],[48.93,27.36],[46.78,30.76],[44.98,34.36],[43.57,38.12],[42.55,42.01],[41.93,45.98],[41.73,50],[41.93,54.02],[42.55,57.99],[43.57,61.88],[44.98,65.64],[46.78,69.24],[48.93,72.64],[51.42,75.8],[54.22,78.68],[57.3,81.27],[60.63,83.52],[64.18,85.42],[67.9,86.95],[71.75,88.09],[75.71,88.83],[79.72,89.15],[83.74,89.07]],
+  droplet: [[50,5],[52.04,6.61],[54.07,10.71],[56.1,16.18],[58.17,21.9],[62.86,26.76],[65.17,29.9],[67.69,32.87],[70.16,35.74],[72.35,38.59],[76.71,45.55],[78.13,48.52],[79.28,51.47],[80.04,54.43],[80.25,57.45],[81.65,64.34],[80.91,67.75],[79.53,71.45],[77.58,75.12],[75.13,78.46],[71.76,85.11],[68.8,87.49],[65.18,89.57],[61.17,91.15],[57.08,92.01],[50,95],[46.33,94.46],[42.47,92.99],[38.7,90.8],[35.32,88.1],[28.24,85.11],[25.9,82.23],[23.99,78.72],[22.57,74.87],[21.72,70.99],[18.35,64.34],[18.35,61.25],[19.03,58.26],[20.26,55.34],[21.9,52.44],[23.3,45.55],[25.14,42.59],[27.49,39.68],[30.12,36.74],[32.79,33.71],[37.14,26.76],[39.25,22.71],[41.29,17.8],[43.3,13.15],[45.31,9.86],[50,5]],
+  heart: [[50,29.53],[50.69,26.11],[52.24,22.42],[55.03,18.25],[56.92,16.22],[59.14,14.35],[61.65,12.74],[64.44,11.45],[67.43,10.56],[70.59,10.11],[73.83,10.14],[77.09,10.65],[80.28,11.64],[83.34,13.09],[86.17,14.97],[88.71,17.24],[90.89,19.84],[92.65,22.71],[93.94,25.79],[94.73,29.02],[95,32.35],[94.73,35.72],[93.94,39.09],[92.65,42.44],[90.89,45.72],[88.71,48.94],[86.17,52.07],[83.34,55.12],[80.28,58.09],[77.09,60.99],[73.83,63.82],[70.59,66.58],[67.43,69.29],[64.44,71.93],[61.65,74.5],[59.14,76.99],[56.92,79.37],[55.03,81.62],[53.47,83.72],[51.33,87.31],[50.3,89.89],[48.67,87.31],[46.53,83.72],[44.97,81.62],[43.08,79.37],[40.86,76.99],[38.35,74.5],[35.56,71.93],[32.57,69.29],[29.41,66.58],[26.17,63.82],[22.91,60.99],[19.72,58.09],[16.66,55.12],[13.83,52.07],[11.29,48.94],[9.11,45.72],[7.35,42.44],[6.06,39.09],[5.27,35.72],[5,32.35],[5.27,29.02],[6.06,25.79],[7.35,22.71],[9.11,19.84],[11.29,17.24],[13.83,14.97],[16.66,13.09],[19.72,11.64],[22.91,10.65],[26.17,10.14],[29.41,10.11],[32.57,10.56],[35.56,11.45],[38.35,12.74],[40.86,14.35],[43.08,16.22],[44.97,18.25],[46.53,20.35],[48.67,24.38],[49.7,27.56],[50,29.53]],
+  rabbit: [[27.5,5],[33.37,32.39],[42.17,42.17],[57.83,42.17],[66.63,32.39],[72.5,5],[80.33,34.35],[89.13,53.91],[85.22,73.48],[71.52,89.13],[50,95],[28.48,89.13],[14.78,73.48],[10.87,53.91],[19.67,34.35],[27.5,5]],
+  leaf: [[6.97,95],[6.03,92.42],[6.54,88.33],[8.13,83.22],[10.4,77.61],[12.97,71.99],[13.4,65],[15.2,60.7],[17.29,56.28],[19.69,51.86],[22.38,47.57],[25.37,43.5],[30.54,35],[33.89,31.47],[37.59,28.12],[41.6,25],[45.84,22.19],[50.26,19.73],[58.4,13.57],[63.36,11.33],[69.12,9.05],[75.06,7.14],[80.56,5.97],[84.98,5.92],[92.68,5],[93.97,7.71],[93.87,12.15],[92.69,17.72],[90.76,23.82],[88.43,29.87],[88.4,37.14],[86.49,41.54],[84.1,45.96],[81.3,50.33],[78.15,54.54],[74.69,58.52],[69.11,67.14],[65.41,70.7],[61.3,74.1],[56.89,77.27],[52.3,80.11],[47.64,82.54],[39.11,88.57],[34.26,90.56],[28.78,92.43],[23.25,93.89],[18.22,94.63],[14.26,94.35],[6.97,95]],
+  snowman: [[49.72,5],[52.65,5.35],[55.69,6.35],[58.49,7.89],[63.42,9.89],[65.22,12.08],[66.6,14.88],[67.36,17.93],[69.29,22.61],[68.67,25.31],[67.15,28.12],[65.23,30.72],[63.42,35.33],[61.59,36.81],[59.35,37.76],[57.75,38.49],[56.57,41.2],[58.6,42.16],[62.36,42.99],[66.69,44.1],[71.25,47.07],[74.05,49.53],[76.83,52.64],[79.1,56.12],[82.99,61.74],[83.54,65.24],[83.23,69.05],[82.07,72.8],[81.03,79.35],[78.52,82.34],[74.94,85.11],[70.93,87.41],[65.38,92.07],[62.25,93.23],[59.12,93.73],[55.99,93.73],[49.72,95],[46.59,94.91],[43.46,94.51],[40.33,93.62],[34.07,92.07],[30.62,90.08],[26.96,87.41],[23.72,84.27],[18.42,79.35],[17.09,75.98],[16.61,72.18],[16.99,68.32],[16.46,61.74],[18.12,58.47],[20.81,55.28],[24.01,52.47],[28.2,47.07],[31.51,45.49],[35.38,44.61],[38.67,44],[42.88,41.2],[40.35,39.28],[37.59,38.16],[36.03,35.33],[34.54,33.09],[32.94,30.32],[31.73,27.34],[30.16,22.61],[30.62,19.88],[31.87,17.03],[33.74,14.43],[36.03,9.89],[38.41,8.33],[41.41,7.23],[44.65,6.67],[49.72,5]],
+};
+/* <</GEN:SHAPES>> */
+/* <<GEN:LEVELS>> */
+const LEVELS = [
+  {id:1, shape:'lightning', name:'번개', emoji:'⚡', diff:1, area:'정왕역 일대', gu:'시흥시', center:[37.340754,126.752745], spanKm:2.092, rot:272.1, mirror:false, km:5.7, recall:90, precision:94, iou:64, fit:82, walkMin:13, desc:'급격한 꺾임 두 번이 전부'},
+  {id:2, shape:'tree', name:'나무', emoji:'🌲', diff:1, area:'연신내역 일대', gu:'서울 은평구', center:[37.615228,126.914305], spanKm:1.697, rot:255, mirror:false, km:5.8, recall:87, precision:91, iou:56, fit:78, walkMin:0, desc:'삼단 가지를 계단처럼'},
+  {id:3, shape:'buckethat', name:'벙거지', emoji:'🧢', diff:1, area:'매교역 일대', gu:'수원시 권선구', center:[37.257265,127.01582], spanKm:2.057, rot:292.5, mirror:false, km:5.9, recall:92, precision:92, iou:62, fit:84, walkMin:4, desc:'챙은 넓게, 돔은 둥글게'},
+  {id:4, shape:'house', name:'집', emoji:'🏠', diff:1, area:'정발산역 일대', gu:'고양시 일산동구', center:[37.661659,126.776943], spanKm:1.64, rot:244.4, mirror:false, km:6, recall:90, precision:91, iou:60, fit:80, walkMin:2.6, desc:'지붕 경사와 굴뚝까지 살려요'},
+  {id:5, shape:'cross', name:'십자', emoji:'➕', diff:2, area:'청량리역 일대', gu:'서울 동대문구', center:[37.580196,127.0351], spanKm:1.547, rot:358.8, mirror:false, km:6.3, recall:95, precision:88, iou:63, fit:84, walkMin:3.2, desc:'직각 코스라 길 찾기가 가장 쉬워요'},
+  {id:6, shape:'fish', name:'물고기', emoji:'🐟', diff:2, area:'수유역 일대', gu:'서울 강북구', center:[37.63909,127.017553], spanKm:1.911, rot:93.5, mirror:true, km:6.6, recall:93, precision:90, iou:59, fit:82, walkMin:4.9, desc:'꼬리지느러미 갈라짐이 핵심'},
+  {id:7, shape:'diamond', name:'다이아', emoji:'💎', diff:2, area:'애오개역 일대', gu:'서울 마포구', center:[37.549197,126.947858], spanKm:2.049, rot:354, mirror:false, km:6.6, recall:96, precision:88, iou:59, fit:83, walkMin:0.5, desc:'반짝! 아래 꼭짓점이 승부처'},
+  {id:8, shape:'whale', name:'고래', emoji:'🐳', diff:2, area:'춘의역 일대', gu:'부천시 원미구', center:[37.490997,126.786362], spanKm:1.675, rot:105.9, mirror:false, km:6.7, recall:93, precision:88, iou:55, fit:79, walkMin:8.5, desc:'거대한 꼬리를 크게 휘둘러요'},
+  {id:9, shape:'chick', name:'병아리', emoji:'🐤', diff:3, area:'남부터미널역 일대', gu:'서울 서초구', center:[37.487186,127.013153], spanKm:1.737, rot:146.4, mirror:false, km:6.7, recall:96, precision:86, iou:56, fit:81, walkMin:1.8, desc:'부리와 두 다리가 생명'},
+  {id:10, shape:'potato', name:'고구마', emoji:'🍠', diff:3, area:'암사역 일대', gu:'서울 강동구', center:[37.543711,127.135574], spanKm:2.259, rot:148.5, mirror:false, km:6.8, recall:98, precision:95, iou:60, fit:85, walkMin:1.1, desc:'통통하게 한 바퀴, 입문용'},
+  {id:11, shape:'star', name:'별', emoji:'⭐', diff:3, area:'태평역 일대', gu:'성남시 수정구', center:[37.443315,127.13306], spanKm:1.688, rot:311.1, mirror:false, km:6.8, recall:93, precision:92, iou:63, fit:81, walkMin:0.1, desc:'다섯 꼭짓점을 정확히 찍고 돌아와요'},
+  {id:12, shape:'moon', name:'초승달', emoji:'🌙', diff:4, area:'가능역 일대', gu:'의정부시', center:[37.741367,127.045326], spanKm:1.748, rot:120.5, mirror:false, km:6.9, recall:97, precision:90, iou:61, fit:84, walkMin:1.4, desc:'안쪽 오목한 선이 살아야 달이 돼요'},
+  {id:13, shape:'cat', name:'고양이', emoji:'🐱', diff:4, area:'동인천역 일대', gu:'인천 동구', center:[37.474934,126.635628], spanKm:1.721, rot:273, mirror:false, km:7, recall:94, precision:86, iou:57, fit:81, walkMin:3.3, desc:'야옹! 뾰족한 두 귀가 포인트'},
+  {id:14, shape:'heart', name:'하트', emoji:'❤️', diff:4, area:'면목역 일대', gu:'서울 중랑구', center:[37.589407,127.086684], spanKm:2.046, rot:144, mirror:false, km:7, recall:97, precision:95, iou:64, fit:85, walkMin:0.1, desc:'두 봉우리와 아래 꼭짓점까지 또렷하게'},
+  {id:15, shape:'droplet', name:'물방울', emoji:'💧', diff:4, area:'뚝섬역 일대', gu:'서울 성동구', center:[37.543342,127.059681], spanKm:2.298, rot:295.5, mirror:false, km:7.1, recall:97, precision:89, iou:61, fit:84, walkMin:0.3, desc:'위쪽 뾰족한 끝이 생명'},
+  {id:16, shape:'leaf', name:'나뭇잎', emoji:'🍃', diff:5, area:'개롱역 일대', gu:'서울 송파구', center:[37.493202,127.129776], spanKm:1.991, rot:143, mirror:false, km:7.2, recall:98, precision:88, iou:61, fit:83, walkMin:0.2, desc:'양 끝을 뾰족하게 살려요'},
+  {id:17, shape:'rabbit', name:'토끼', emoji:'🐰', diff:5, area:'신천역 일대', gu:'시흥시', center:[37.443696,126.791519], spanKm:1.796, rot:249, mirror:false, km:7.2, recall:95, precision:85, iou:58, fit:81, walkMin:0.2, desc:'기다란 귀 두 개가 승부처'},
+  {id:18, shape:'snowman', name:'눈사람', emoji:'⛄', diff:5, area:'우장산역 일대', gu:'서울 강서구', center:[37.546526,126.83981], spanKm:2.081, rot:236.5, mirror:false, km:7.4, recall:94, precision:91, iou:61, fit:83, walkMin:1.7, desc:'잘록한 목이 관건'},
+];
+/* <</GEN:LEVELS>> */
+const PACE_SEC = 390;          // 6'30" / km
+const ROUTE_CACHE_VER = 'v11'; // 좌표 바꾸면 올려서 캐시 무효화
+
+/* ---- 사전 계산 코스 (tune.mjs로 서울 전역을 탐색해 고른 최적 스냅 경로) ----
+   구글 인코디드 폴리라인(정밀도 1e-5). 없으면 런타임 라우팅으로 폴백 */
+/* <<GEN:ROUTES>> */
+const PRE_ROUTES = {
+  1: 'us|bFgiqdWVVxIqP~I{PPYXi@^u@Tc@N[dGeLVe@HS~EgJP_@JQUUQOaA_Au@s@INqCmCe@|@i@dAi@`Ae@e@g@e@{CuCf@aAj@eAd@}@JQw@w@i@i@hH{MJQo@k@f@aAb@y@f@_Ab@{@d@{@@Cb@{@aD}Cb@{@h@cAe@c@y@y@uB|DJH@HAN[j@g@|@d@d@qBvDqHnNq@q@KTc@z@e@|@c@|@gAvBiAzBqBvDwAnCLtAe@z@g@g@e@|@e@z@m@fAj@f@{@~Ao@lAq@rArCnCr@sA|@|@jBoDZZDNBLRRLJv@t@|CvCi@bAg@`Ae@|@MTWd@e@|@e@|@b@`@e@z@e@|@i@dAh@j@g@bAe@`AYXWPy@h@]NQ^e@z@c@x@e@~@i@bAm@jAxDnDl@iAv@v@nAlA',
+  2: 'yjqdFeiqeW_AC?aB@Iw@Q[Fs@UAq@Si@O[sAm@U@i@u@{@kASYp@}@WW]YCAw@i@EC{@e@ECIEs@KEACAeAOVqDl@HVg@Fi@Dq@QEOMg@i@c@_@IIc@a@[[QOg@c@o@m@l@cBo@o@Y[k@i@KGJu@qAYISFo@JaAx@Nf@JDBLy@TwAU?]C]CLoAcAQOfACAGEq@c@b@wAKC_EcCAGh@iBmBeAKaAqALIkAsANAQI_AC[rAQI}@rAOEm@hASTClAk@r@c@~BtA\\gAVq@L[J[ZcAN]HSLSv@m@t@m@kA}BvA}A`AeARYfA`BDJNSDEn@u@BEZ~@d@nANb@Xx@^jAFNLb@Nb@BL\\~@hAq@pAy@rAy@n@a@`@YnA]h@OASDEFEnARtBZ@RSlDOvCGlAUlEA`@G|@KfBaAGa@Ew@MUCA^ATANjAJtANJ@LB|@Fh@DFHD?F@N@DAHDBHRHOh@a@p@VTCH_AlBCFb@Pg@xBBBS|@gA~E_A`Dq@tCxAHtAHM~AAVdAFKPEdB@Pq@zBuA]k@MEPSnA?BADQbAG^Mx@D@D@H@vAVMjAGt@DLFTKnBEdAKAWCC^CP_@CgAUGKFbBHf@?j@CZ',
+  3: '{ckbF{yefWm@QOEoAtCcBxDAmC?Es@Ds@?yAA?hEC@i@Dg@Cc@Ee@Ma@MWIg@BIC[Kc@Qi@We@S_@Sq@Wg@WWMc@Oq@Ys@[o@Yg@Qa@SWK[OSI_@OAEa@S?WUK_Bm@aBm@v@aDz@kDDQmEqBo@YFa@\\yBR_Az@eELq@|@qETgATeA`@wB]OgAc@ZcBTqAZeBeFcBWxAgFwBx@eFcBg@PmAXwB`@_@`AsFLm@BOV}AJBnHxBWzAjBh@dBf@F@ETxAb@h@L^Lz@ZOFGN?PDRzDzAbDrAL?LFtBx@hAb@r@XF]^N`@P|DfBlBr@nAh@r@Z^NpEfB~DfB^PD@|CpAj@R`@RF@NHTHRHn@ZPHI^j@ZJDHDVJnBt@fA^a@bBc@dBe@rB[lAAFc@nBAFYhCeDqAm@Ui@K{@I@qA_Au@iCrFQ\\ITeDdHc@|@mC~FQf@',
+  4: '{fzdFcuvdWKBKDEOES]{AqC`Bi@yAQNGSIUoAdAGDCEMU{@v@CBCEyAqCKOIOIJML{@gBoChC|@jBDJFJiAfAEDEDaA~@ONKJEIIMmAaBCEMSCAEIIUMUiAoCGKEGiCcFGKIM[^IHk@cAo@kAyBrBo@oAs@kA`AaAt@s@h@i@JJNRFKJMV\\p@pAHNn@s@m@kAu@eAk@}@_AeA^gAZ_AeBcAKGBE@EHUECsAy@GERc@dAsBaAy@b@}@IK_AaAu@kAy@uAIQJGUi@Wm@K]eAoDGUwAiFEQrFoCxGgDI[\\QzDkBNGdAg@GUFAdB{@`Bw@LGJEdDeBTMPKFRlAi@rDgBLGH\\nDkBDRHGp@]V|@BLDLbAzDRr@BLDLd@hBBHBHDFA@AB?B@B?BBB@?B?B?@A?ABFBD@Fb@`BBHDLf@nBd@dBDJBJh@zBJ\\n@`CDNDNfAbEBLDLXnA@HFEh@WJEJCJEn@WXMBLLd@`BdG_Bt@WN]Nv@xCIDDNcAj@BJMFaGtCr@dCFLNBFT@FBJBLD^@Hf@tBSJOJBPBNqAn@OHKFdAtEgBt@IDKDKDE@KBDPDLb@dBDJaAf@g@Vn@xBEBCDEBCFSHWLKFC@SH',
+  5: 'waldFg_jfW@GBEBEBCDCAEACEEUSA_@?[?UAaA?e@?u@Ay@Cw@RA?GKuGBKA[AICwB?_@?I?YEI?q@D@jAJFy@A{@hDElAAbBCnDIlACV?vADD}A?UAc@AwACuBAqAA_AKsCCaBGuEvAApACtAC|@Cl@Ub@QDABCfA]dBm@z@zDX\\HEXs@~@q@pA_Ah@pAhB|CSDgC`ADNXrAh@hCd@vBT`AXxABTG@aBT?H@ZBLNTCDBDJLl@VXB?\\FAFEj@AdBDJ?D?~BJR@H?lADdCHN?J@l@ATBRFBBDJL@V??bBFdM?R?V?J?D?FBxA?D@rA?l@@rA@fA@nAWAsBBs@?y@BsABsA@sADqAFgABcA@cBHDx@Fj@Hv@Dh@Lt@DPJj@K@K?OBDZBb@?HLFX\\Nx@oA`@WFbA`FJrBNABNAJo@XGAA?u@To@P]N_@RQNUN_@V}@`AgAcBiAmBc@d@]`@c@d@k@n@wBqDs@bA_Ay@uAmBCCLO|@eAs@sAKSFIDIDOBI@S?MAIGWGKIOOK[G?C?i@^MX_@CcE_ABAa@G?AsAEoFE@SPc@BsA@KAMAO@KDGTMTGZCV?ZE?ID]Yu@o@{@hBg@dAKZIPSQIG{@s@y@q@IPKGg@a@ECA?C?E?A@EIEBCBCDCDAF',
+  6: 'uzwdFqggfWz@oA@AfAsAVWb@_@d@q@Vk@Vs@P_@|AuBn@gAPgA\\i@LSz@bBbA_BBEDGp@aAt@Bf@AL?bBMD?~AIA_@CaA|EWfDSFbBTCnBKxCQ`@Ch@CBXJhCHAl@a@DCTKNANA\\AjCOTAB{AB[\\CANNCAPCjAANAVAx@@RFNHXH^HVH^FXX|A@FzBM@|@@J@NDPrAeBDx@FpCLj@VAV@~@BB?RJXLd@uBnAh@Pu@Jk@DIvAc@Q_A]}BMu@pA_@HC|Ae@xAc@PbAJp@^~B{Ab@Lv@v@zEJj@XfBG@UK]hBMf@XNTJI^@bA?TQdASlAALAJMHWLSh@@l@h@rDHj@SFG@G?DhAD`Bs@FFlAcADBp@@d@@F?@?B@DNj@?B???@A@A?eAKGAA?C?AG?C?EAQAs@As@As@EWU@cAFs@BEwAA_@oAXC_@g@FWOAWCs@E_A?KGcAQHkBJiAHE?E?CAq@MEXCNAJCHANGfA?PCb@?d@AX?\\?XD^Jr@q@HsAPq@H[BE@k@D]@?VBn@yAAEDWPSNGHGHuAv@CGWaAc@yACKyCnASaAI]IMIJ_@h@]h@s@lAg@n@Ac@Im@?Kw@PYPKFGMOKGMAEUk@KUM}@gCf@UiBSFy@TmA^KYACWg@e@}@[k@WFuA`@eAX@EHo@@GyA]J_AaAO?G?_AAk@CIS_AQ{@G@gCz@WuAQcAEWeBiB|@cBFMEKs@q@WCKPSW]QSKl@uA',
+  7: 'offdFyixeWEmCO@C_AIwCQoAEsCAqEAu@AgACiAPOHA@OBq@Bs@Ew@KcAIKKSO[KyDEqACw@WeDCw@GsBBi@TKXEh@@NBb@C^AXFEe@VSCyAEoBCwAZPF@FI`@CEOBQJSPIG]XIv@c@XQu@{BC]hBa@h@K|AIHoDKEKEMIOCSIUGa@OXoABMBGDS~ErBRsADBDWLBFDHFNSBCPOPILl@fBb@NsAn@HGx@^FKjAb@RjA^dA`@?D?Ba@vB`A^fAiEx@Zt@XRHAFI^EAYvARJPBt@XEZ?NCHKd@F@~B~@GVCRtAl@pChAh@Vd@LdAh@\\Pf@b@J[pD`CtCjBr@h@zAfARLITELPRDNBVAJJFXPTLDMbAj@`Al@dBlALl@Bb@VARBdAzA{@fAk@vAuAjDsB`F{A_A{@~Ba@~@cAbB_@p@c@t@e@x@Yd@_@v@M`@_@pAAFy@^CC?k@WdBUdAIZQh@CAGGOI[QUj@{@RAL@XQBe@N_@]IPKIKBYb@HHh@PHZAJQr@IHIHOLSNk@VQ?CCa@lAa@fAGGm@xAMIWj@[f@MROPQNURWLGHCD?D?FFLOHD\\w@d@[R]Vk@`@WV[`@WZGGa@g@AE?UBEYHI@c@JG@CQCWCOQHE@I@CB_ARE@QBkANI@IcAQBEk@IeAK}@AGCECAEAYEC?g@?I?cAH[oAGSaAkEI]U_AEUCIa@kBKDg@z@kAh@g@sBuAXw@\\EKGe@GgB',
+  8: 'iwzcFchzdWn@cItB\\Fu@jAPF{@b@FDq@P}BFk@nBZTmCr@LtARfAPLBnBXLuAPi@NyAAq@FB~@?tBN?HlAFL@xBL~AF`DHIdAdDj@KhA|B\\VIDLZRQvBHETGMxACLzATb@Hb@Fl@HqA~APVj@w@r@dAe@x@_@j@FFPVFHl@y@bApA`@FOzBEh@CTKpAvARHkAhBVFw@RgCtBZ@EP{BBe@NcBdC\\F_A^}@^}@Zu@Rg@vAFh@FKbAO~BQ~A_BUMAMBMHJJg@~FmASg@hGeC]?DIfAKpAMbBO`BCh@QrBUtCUrCQfCIbAXDhBX?@MxAWpCAZQ`CGv@OrBWEs@cCi@INaBB]Fs@@OqBYb@_GiBY\\gEwASaBSqBY]dEkBW{AUuASSCIhAARKhAInAOA}AS_BUgC[aB[C?GCSIQGIEy@gAaAkA_ChDaA_AiE_EaByAq@o@MKa@_@JyANkBu@KOCsC_@PkCTiDuB]LiBV}C',
+  9: 'w{wcFq|gfWCUVCVELAJjBTbCLjBTrCRrANh@`@|BFVMFBNPz@WHp@jDSVLn@jAxF`@tBuB}@QxEA|BP~@sAl@mBr@c@Pe@Nw@XHZ_C|@@LBLBXn@U|Am@\\dBb@tBBpHXxBb@`E{BCUqBMaAW_CcCd@kAm@VeAHUBQKIkDwAiAb@qDtAgCbAgEzAa@mBAKGWEUYHSDiBr@_DjAI?WLoFvBS@UEENCJ]Ng@RQF_C|@e@kBa@iBe@_C|@}@vB}@rBy@jAe@bBq@uAeEWu@Og@oCdALh@uBv@e@CyAd@kBp@i@{AIWCIq@gBm@oBjC_BMk@WmAEQv@Kt@b@?I^C`@C\\q@j@Il@GfCWCa@MuBI{AAK?GJCjAK?MMyBIuAa@u@TYF@LBN@NANCVENIZQgA_Cj@g@o@wAFGLQZo@LWzAs@I]EQl@UfAa@FC^Mj@UNGLEx@WHE|@Yn@UHCj@S[{A[aBFe@h@QRG^Ov@WAS@i@Fi@NYJMr@U^`EdB[E[G]~Am@nBw@b@[Xj@`@^d@FAtCtAi@`@OxAm@r@z@j@r@R_@v@IDl@jB[',
+  10: 's|ddF{{_gWdAJjAHfAq@LAFgAdDX|BCnBCzBMnAS`BWtAUN?|Ab@|A`@vA^b@Jp@Pj@Pp@Pz@V~Ab@IjFnBFvBJKzExA^lA\\[pBzDfAGb@ETYlBa@lCa@jCYjBlDbA]|BpDtAbGdBcAvC\\Nn@Vh@Pj@Rj@Td@P\\NyApH]xAS|@sA`HcBrH]dBk@nCQ|@[bBa@bBc@hB_CKwBKElAYCmA_@_Ey@G^u@|DyCw@g@g@MO}@i@KTeEgALiARiA_Du@aFgANoBDg@HeAcBRDk@FmAqEk@TiDRgCq@U[Ii@QqA_@`@mABGgEsAKZCAyCs@AWIkBEwAGiAAc@mC@aB?Cy@GmCk@CBcBeBSNkBh@m@Yc@dAgBMMg@c@][mA|@o@R?{G?G?{@?{@?iAA_B?}CA{BjADLwFhBFBa@?OA[C_@^?P{A?g@?WAQVDB_@pBPB]DiA',
+  11: 'm~pcFyn|fWU@U?U?ImCAYrAG~AEY_BWsACI|Bw@YuAMg@Kk@xBy@Mi@?CMi@Ki@zAm@Mk@Ii@Kg@vAg@Kg@Kg@hAc@EUQy@WoAiA^Mk@Ki@Kk@Ou@kA`@S_AKo@?Ku@MoAOCOKi@Ki@Ke@Mk@Kk@qAd@Ie@Mk@Kk@k@RMk@Mm@Mm@Mq@|Bw@Ll@Ll@|Ai@Jj@vAg@Ll@fA_@VrAdJgDVrAXrAXvAbAa@lAa@e@yB~@]Ms@q@qDFCt@[NQ|Bw@JEg@gCG[lAe@w@}D^M`@M`@Q@?PGJE@?q@mD\\K\\M^Op@rDE@v@tDf@`C[Xj@vCJ^`@MB|E\\MVKJf@Hb@Jd@oAd@^bBZKLn@Ln@jCaA?@Lj@Ln@jAc@JELp@fAc@Lj@rAg@@@Jh@FZ`A]zAi@BCNn@Jj@tAe@Jj@FXJl@Ll@Jl@qAb@Jd@a@N}@ZcA^Jf@sBt@Hb@_Cz@{FtBZ`BBHp@lDH`@H`@Jb@F`@w@X|AtHl@~CFXwALHb@Hh@KBBL@JL`AKBcARy@NCc@Ek@Ci@C]eEb@{@JEc@AYp@I_@eBi@wC_@mBcA\\{@ZMo@Mm@Kk@}CdAyAf@kBt@iC~@Ll@uBt@Jl@k@TmC`AqAb@@T{AH@n@Q?',
+  12: 'gajeFupjfW?\\I?e@@EAKE?ASBOCADEFKDY@K?AoAi@?GBa@?c@CCCMc@Wm@KJs@z@QRy@_Ao@c@o@UICa@~AUFGAA?MKK[A_@_@q@g@{@k@aA_@o@aDaHUm@EMcCBAkCqAB]?EaEAsAo@@i@@]@?OCsBAw@?g@?IAM?IAsAAW?E@G@EBCDA?E?E?QAQ?C?EE@EAACACAs@@IAG?MEgC?I?GAS?e@Aa@AgA?OG@A[?OAc@?]?_@Aw@Aq@hASRCE{C?m@C{BdAEN?xAEAuACkC?k@t@CXAC}BjC}@a@oBNGx@YvAi@FM@EBE?I?CAM@IJMJIYi@EGXKz@AZ?nAAAiB~ACrACfACdAAAsAjDG?O`ALnBt@TVpAV?K?e@DGBU@A~C`@rAPt@JL@HbALKtFz@jAPKfASnBfA`A~ArAhA~@rD`DQ`@c@bAwDcDo@pAwAoAkAaAcBBmAB_BDm@BeABaA@q@@wABcBB@lCgAu@mBqA@hB@NA`@BrBmBD_ABDpBwB^_ANLfBBV@XH|@B`@}B^LrAcDT@hACTAN?P?F?FBhCFt@BhB?D@DBPBDBBCBADCD?H?X?X?FCBBDBFFFADCFAH?FA^D`CAjB@x@@l@DnE@FBF?B@J?HRCpACdAG@?HB@Lc@zGOjBF@Gr@`BTd@NrABHj@Jb@z@QbCG?H@zA?DFnERC?@JDD@d@AH??]',
+  13: 'kkucF{vzcWU?q@??GAkD?a@BEAAECCAYO[QGECAu@a@SMGCCCE@KGCGMGG?OIEIECEAWO?CBKDQiBcABWKECAUMG?e@Ug@YEEWOUMEAUSIMECD[a@k@Wu@WoAEIE@IMWc@KKIG{@o@@Ek@c@MNq@r@AEEGABq@f@a@BE@QFs@Re@LoDx@WVMQc@_@GEMHGJm@r@g@h@m@r@e@^KRi@z@g@~@Wf@qBhDgH`Ff@}C^{C[a@c@aAk@[RW\\i@BIHQF[@]Hc@Q@f@yAPq@u@[f@aCkAm@SIc@m@`AyAhAsAMK]WIKOOIMa@k@DG_@i@_B_C?Qn@{@h@q@CMIKl@u@?G@GCIAIuAoBLONSiBgCJOU]Gm@vCaIDARKc@_AIUF?@MHi@BC@@HDR`@HHHDJAJGFKFkBAIGCm@KCi@B]?aAAG?GCQN{CJOLMHCF?X?n@mDvC\\rBTnBTLoBpBTK{BzDd@TkEh@FBATB@UN@\\Xb@`@f@\\LHDBHQHQT]T?~@JhCZ@OnEj@J@JM?EF?F??HHLHB|@Ld@LhAf@f@`@fAr@x@l@vEdDCLp@`@XPRH^HZDZDH@@?nAB\\ZiAzBo@tA`ADSlFAl@LI\\UTINAz@DBFPVFDYZIN]|@xBz@u@xARHo@pDGLrA\\WxA]rBi@W[nAGZCRATAr@AFBn@EjBK^E@?j@Sd@UZJ@B^BrABP?PHNVPPLyBjBb@v@LJIr@@r@f@JTNi@jAINgAlDIIGNQl@CJJFSr@s@fCWr@[z@@|BQ?P??dA',
+  14: '_`ldFodufWj@F\\`@R@NaDjAJZHPm@vAH`BJpBP`BL@zBnCJOfCx@IV?`@BAJD@B?jBR@@p@HB?BB?BClA?NANCt@C\\TBIhBlAHCz@GvAO|Er@`@m@~C\\NELADY~@IEIVIj@e@HMBc@NOrDK|CUCYb@AFAF_Az@MQk@h@@Za@j@A?C?W??BmBCCCMAI?K?SAEJ?NAd@?H?FI?C^y@AeACyBCAZIAK?I?EGgEEq@@O?g@AG@E@EDAJWDUDCOEWCABWe@AM?UO{EE?W?_CaDEWAaISgACcAOoBJUAQsA_B^Im@kBd@Jp@K?u@Cq@CMAOeAKo@eBh@ESWyAKo@Km@WyAhBk@c@iCG]AGIg@jBk@Ko@[gBMy@Y_Bt@OCUK}@Ue@MYVU`@[HOjAoBgBoBhAoBPYe@eBf@OhBe@Y_C]mC]wCQoASsAUiBCU|AGIwAAOM{@rCQImA|@CYkAq@oC~@QfAS\\wANk@R{@Jc@V_Ab@qBDBLDF@|@b@FSXLF[ZmAH_@vB`A@@@CT_ANu@nF`CRs@`EfBFU?A@A@?@?pAn@CHFBb@RB@D?B?@?pB`A\\N@B@@??BBz@^HBA@S~@e@rBtDhBk@lCxB~@g@bCAb@Cn@C^?PEr@Ct@C|@M~CItAMhCaBKOjD',
+  15: 'amddFojmfWaDmAr@kEgCs@HOpAyAlCcD}AsB_ByBjDoGeC_AqBu@pDyLHYgEs@lAyHBWMCGAIA@KIEs@c@TsCFoAAiAG{AW_CUcB]}@ISbBC~@CGeDKcDNAJ?FAOuENFCsB@EBABSb@RAG@IRHN?HBBSd@Vf@aCf@TDBn@gCd@Rb@T`@kBH]F[XsABQ\\d@NPv@cANSBIHIj@e@`@z@LVxBqBFCvBsBb@x@NKpBsBv@Xz@Zp@Vb@P@?l@TLDf@RRHf@Ph@RF@XsAPs@hA^FFRJVJPH@GHDjAb@fA^rEdB?LD@i@vB|@^^|@OhALlALx@dAOK`@[vALp@zBo@WlAMj@Q|@RLD?JI|@u@tBp@Oz@G^a@jCCNKp@GZCPSdA~Bx@[~A[tBETSvAKp@sBkA[fBDXHFGVG\\JDGVdAf@JTr@\\AHKbDEh@IrACx@C`AAh@ALEf@mBf@_BPFh@Fx@sA^oA^O`AEVO|@CL_@vBAH_C`@c@LOHaCv@oDjAOJa@XWRgBnAeD`Be@OUlAu@vDCLuATcAPADCL_Cs@aAYyAfJWxAwAm@Ov@Qv@QGe@|B[DUDoBd@~@iE',
+  16: 'i`|cF_j}fWHKIGR[NMPG@GLMPKLCPCPIFG@K@KJ_@TQT@IWFGRBRBNAVRH`@NC\\NBLFGXJ^?@eB]Mr@}@FEd@k@nB_CNVRZFA@@BCNUFGDE\\{@\\TTZ^j@LREs@Zq@b@z@JFFSDk@@SNUKKAWIM`@o@?K@Sh@y@`CbDHJBHP[P_@H@JDTTZZjAoCj@p@h@kAh@oAbC~CVZNHR?`@g@Zb@\\d@bA}Az@jAz@kAl@}@n@}@n@{@dDdEt@aAx@eA|@bA^c@?AV[RXFI|BrCn@eAnB|BHHv@~@PRRTNRLN\\b@zAgCV\\BCj@{@JPZd@JHJJLRLRRVLHPJHHf@l@v@|@x@~@lByClAtAdDhEr@iAl@lAVb@g@x@x@bAv@~@RWH?j@Ph@RVP^j@LNb@RRRdBxBFH`@d@A@k@V\\lAVBVjFC?kAJ?KAM{ANH~AJnBS@aAHcAH_@@e@DkAFcA?}@MKC}@YSGLjGMMQAKT@H?F@J]BG@]@uBHBbBeABgABi@B{@@E@_@Hi@sASL{@p@m@mA{@r@y@n@sAdAk@qAoAdAu@l@o@wAa@\\MH]TSc@JIMYKHKHYRQLc@{@GPGHDF]XUPs@eBq@h@s@l@u@gBsDdDIMaA_Bq@w@{@_Am@p@s@k@oCoAQGCJw@[gCeAeA[_FgB}CoAmAs@k@]kBcBkBkBCICEAGSSY[CMGAIAIG][EEi@g@IIiD_DYUDKDCJEBU?CCg@GYIQCEOMQe@CE?KWAOOASA]Ac@?QODKPIJ',
+  17: 'qaocFyrydWsA@@cHa@O]O[OoAo@q@[]QJYECSI?C?E?EIGQKMGCBC@GCu@a@IEr@}BBMj@iB^qAw@YK[k@d@k@j@FNaAoB[Ag@SmAg@OYMU]]MG^cBcAi@KEs@_@]pAIGUx@C?EBeAg@EPCJq@|BCLuAo@u@_@CHIGm@[MDQl@?F?DBB@BGTGTd@TFDa@|Ag@|As@pCuA~ExAr@fAj@U|@BrC@nBw@BaA`@tA`Gl@rC\\`B?DwAj@Wy@[_A[u@O_@O]_CiE{@eB}@kBmB{DeBiD_AuBSp@IS}CaHm@wAu@mBo@wA{@oBoCmGhAMj@GVENGNKNKHILMJIJIPILEHAA[KAOAe@QaCaAwAo@KEP{@J_AFQnAmAZ[KM[_@P_@|BiFFMU_@WW~@oAjCwDLKBOJIFIDADCz@{@VOzA}AP[PQX]b@e@HSFGR^V[x@gAb@?HKFCFC?AHOFILQDEB?@@Hd@BJDFn@zA@DBBB@FCpAy@BHHEzAo@LGTI|@UREvBWz@GP?T@PBNBVDTJRHNHZN~@gBPv@FVN`@dAbCJRLPJHJHLFLD`ARAL`AVZLTPtE|DPTUfDAh@TFTF\\LPFrBv@WbAETAXCZAd@EFB\\C~C?FAhB?lA?V^AZ|D?T?B[@?Pe@@?B?DAtGGvA_@dGvB@AbHpA@AxBAjBk@Lg@BEnG',
+  18: 'mkcdF}ubeW?EO@QJiAB?d@@`Ay@@S?I??RINGJIBQFWD_@@WAOGEIOIO?MBMHGBM@OCGEGGIGKAM@QDS?CMEEK?KBKFMD[@MM?k@SI?IAICG[RY?G?UWAmBk@QYTUBQ@aA@Y@AoAc@Qg@@?q@EK?gAA_@K?KE_@[QQQs@vAIAsF?uA?{B?eC?W]@aA?u@?g@?]?uC?}@?Q?Q?M?}@?yB?Y?cAA@a@BcA@W?Y{DBsA?@eBwAUCPmB]J}AkB[LaCFaAMCNgAqBi@]Dy@OLsCD{@PmDDs@TaFNi@N[x@m@zBgAXS^WLSHWJg@JcA@}@Ag@a@}AGWm@}BK_@tAkAXw@r@l@Tw@^}@^XXPVNLHJy@j@oAr@}AN]pAdAHS^y@bAv@pCqGz@bAv@uAz@sAlDjEt@iAf@u@dA~@VChAtB^]@GVm@`@SDCz@a@b@SLLJj@BLEN@FFBHCfA_@dAlE|@_@n@nCd@lB{@\\DHN^VTTHb@BpBCBzAhAlBf@x@kBrBn@fAh@z@s@v@u@z@IJn@dAEL[dAY|@S\\OVHHFF`@\\PTkAnBf@l@_A~@ED_A~@mBjBm@D_@BB`A?DFhB@T@X?FB`A?J~@q@`@v@LKPMPOx@o@\\r@|@nBlAgAVnCDAbCe@tAa@FA?FBPJj@Lt@F^VtALn@DPRC^zBJh@VzAQDBL\\tBTzANv@@H@FDPBHDV@DG@g@Lm@NTpADNBLDX_Bj@Jt@XzBCBOTOTGJk@nAo@g@EaBe@@mAB@`A?l@?D',
+};
+/* <</GEN:ROUTES>> */
+function decodePolyline(str){
+  const pts=[]; let i=0, lat=0, lng=0;
+  while(i<str.length){
+    for(const ref of [0,1]){
+      let sh=0, res=0, b;
+      do{ b=str.charCodeAt(i++)-63; res|=(b&31)<<sh; sh+=5; }while(b>=32);
+      const d=(res&1)? ~(res>>1) : (res>>1);
+      if(ref===0) lat+=d; else lng+=d;
+    }
+    pts.push([lat/1e5, lng/1e5]);
+  }
+  return pts;
+}
+
+/* ================= state ================= */
+const $ = id => document.getElementById(id);
+let save = {unlocked:999, stars:{}, streak:0, totalKm:0};  // 미리보기용: 전 단계 안 깨도 다음 단계 확인 가능
+try{
+  const raw = localStorage.getItem('rungam_save');
+  if(raw) save = Object.assign(save, JSON.parse(raw));
+}catch(e){}
+function persist(){ localStorage.setItem('rungam_save', JSON.stringify(save)); }
+
+/* ================= geo helpers ================= */
+function densify(pts, maxSeg){
+  // 꼭짓점 사이에 중간 경유점 추가 → 라우팅이 도형 선을 바짝 따라가게
+  const out=[];
+  for(let i=0;i<pts.length-1;i++){
+    const [x1,y1]=pts[i], [x2,y2]=pts[i+1];
+    const len=Math.hypot(x2-x1,y2-y1);
+    const n=Math.max(1, Math.ceil(len/maxSeg));
+    for(let k=0;k<n;k++) out.push([x1+(x2-x1)*k/n, y1+(y2-y1)*k/n]);
+  }
+  out.push(pts[pts.length-1]);
+  return out;
+}
+function shapeToWaypoints(lv, maxSeg=8){
+  // 정규화 도형(0~100)을 해당 지역 위경도 박스로 변환.
+  // 튜너가 고른 회전(rot)·좌우반전(mirror)을 그대로 먹여야
+  // 미리보기의 '목표 도형' 점선이 실제 코스와 겹쳐 보인다.
+  const [clat, clng] = lv.center;
+  const latSpan = lv.spanKm/111.32;
+  const lngSpan = lv.spanKm/(111.32*Math.cos(clat*Math.PI/180));
+  const a = (lv.rot||0)*Math.PI/180, cos=Math.cos(a), sin=Math.sin(a);
+  return densify(SHAPES[lv.shape], maxSeg).map(([x,y])=>{
+    const dx=(lv.mirror? 100-x : x)-50, dy=y-50;
+    const rx=dx*cos-dy*sin, ry=dx*sin+dy*cos;
+    return [clat - ry/100*latSpan, clng + rx/100*lngSpan];
+  });
+}
+function distM(a,b){
+  const R=6371000, dLat=(b[0]-a[0])*Math.PI/180, dLng=(b[1]-a[1])*Math.PI/180;
+  const s = Math.sin(dLat/2)**2 + Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+function buildCum(pts){
+  const cum=[0];
+  for(let i=1;i<pts.length;i++) cum.push(cum[i-1]+distM(pts[i-1],pts[i]));
+  return cum;
+}
+function resampleMeters(wps, everyM){
+  // 위경도 경유점 목록을 균일 간격으로 다시 샘플링 (라우팅 경유점용)
+  const cum = buildCum(wps), total = cum[cum.length-1];
+  const n = Math.max(8, Math.round(total/everyM));
+  const out = [];
+  for(let i=0;i<=n;i++) out.push(pointAtMeters(wps, cum, total*i/n).pt);
+  return out;
+}
+function pointAtMeters(pts, cum, m){
+  if(m<=0) return {pt:pts[0], idx:0};
+  const total = cum[cum.length-1];
+  if(m>=total) return {pt:pts[pts.length-1], idx:pts.length-1};
+  let lo=0, hi=cum.length-1;
+  while(lo<hi){ const mid=(lo+hi)>>1; if(cum[mid]<m) lo=mid+1; else hi=mid; }
+  const i=lo, t=(m-cum[i-1])/(cum[i]-cum[i-1]||1);
+  return {pt:[pts[i-1][0]+(pts[i][0]-pts[i-1][0])*t, pts[i-1][1]+(pts[i][1]-pts[i-1][1])*t], idx:i-1};
+}
+
+/* ============ 경로 후처리: 삐죽 스파이크 제거 + 미세 지터 단순화 ============ */
+function pruneSpikes(pts, eps=30, minLoop=55, win=600){
+  // 갔다가 그대로 되돌아오는 왕복 삐죽(스냅 부산물)을 잘라낸다
+  let out=pts, changed=true, guard=0;
+  while(changed && guard++<8){
+    changed=false;
+    const cum=buildCum(out), res=[];
+    let i=0;
+    while(i<out.length){
+      let jump=-1;
+      for(let j=i+1;j<out.length && cum[j]-cum[i]<=win;j++){
+        if(cum[j]-cum[i]>minLoop && distM(out[i],out[j])<eps) jump=j;
+      }
+      res.push(out[i]);
+      if(jump>0){ i=jump; changed=true; } else i++;
+    }
+    out=res;
+  }
+  return out;
+}
+function simplifyDP(pts, tol){
+  if(pts.length<3) return pts;
+  const keep=new Uint8Array(pts.length);
+  keep[0]=keep[pts.length-1]=1;
+  const stack=[[0,pts.length-1]];
+  while(stack.length){
+    const [a,b]=stack.pop();
+    let mx=-1, mi=-1;
+    for(let i=a+1;i<b;i++){
+      const d=ptSegDist(pts[i],pts[a],pts[b]);
+      if(d>mx){ mx=d; mi=i; }
+    }
+    if(mx>tol){ keep[mi]=1; stack.push([a,mi],[mi,b]); }
+  }
+  return pts.filter((_,i)=>keep[i]);
+}
+
+/* ============ 보행자 라우팅 (OSRM foot — 인도/산책로만) ============ */
+function ptSegDist(p,a,b){
+  const dx=b[0]-a[0], dy=b[1]-a[1];
+  const t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));
+  return distM(p,[a[0]+dx*t,a[1]+dy*t]);
+}
+function shapeError(route, lv){
+  // 스냅 경로가 원본 도형에서 평균 얼마나 벗어났는지 (도형 크기 대비 비율)
+  const ideal = shapeToWaypoints(lv, 4);
+  const cum = buildCum(route.pts), total = cum[cum.length-1];
+  let sum=0; const n=120;
+  for(let i=0;i<n;i++){
+    const p = pointAtMeters(route.pts, cum, total*i/n).pt;
+    let best=Infinity;
+    for(let j=0;j<ideal.length-1;j++) best=Math.min(best, ptSegDist(p, ideal[j], ideal[j+1]));
+    sum+=best;
+  }
+  return (sum/n)/(lv.spanKm*1000);
+}
+async function osrmFetch(wps){
+  const coordStr = wps.map(p=>p[1].toFixed(6)+','+p[0].toFixed(6)).join(';');
+  const url = `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${coordStr}?overview=full&geometries=geojson&steps=false`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('routing http '+res.status);
+  const data = await res.json();
+  if(data.code!=='Ok' || !data.routes?.length) throw new Error('routing failed');
+  return data;
+}
+async function loadRoute(lv){
+  // 1) 사전 계산 코스가 있으면 그대로 사용 (튜닝된 깔끔한 경로)
+  const pre = PRE_ROUTES[lv.id];
+  if(pre){
+    const pts = decodePolyline(pre);
+    return {pts, meters:Math.round(buildCum(pts).slice(-1)[0]), snapped:true};
+  }
+  // 2) 없으면 런타임 라우팅 (새 레벨 프로토타이핑용)
+  if(lv.noSnap) return fallbackRoute(lv);
+  const key = `rungam_route_${ROUTE_CACHE_VER}_${lv.id}`;
+  try{
+    const c = localStorage.getItem(key);
+    if(c) return JSON.parse(c);
+  }catch(e){}
+  // 경유점을 너무 촘촘히 주면 스냅이 지그재그로 튀므로 ~170m 간격으로 리샘플
+  let wps = resampleMeters(shapeToWaypoints(lv), 170);
+  let data = await osrmFetch(wps);
+  // 스냅이 멀리 끌려갔거나 이웃과 겹친 경유점은 삐죽/왕복의 원인 → 빼고 재라우팅
+  const keep=[];
+  for(let i=0;i<wps.length;i++){
+    const w = data.waypoints?.[i];
+    if(w && i!==0 && i!==wps.length-1){
+      if(w.distance>65) continue;
+      const prev = keep.length? keep[keep.length-1].snapLoc : null;
+      const loc = [w.location[1], w.location[0]];
+      if(prev && distM(prev,loc)<20) continue;
+      const p = wps[i].slice(); p.snapLoc = loc; keep.push(p);
+    }else keep.push(wps[i]);
+  }
+  if(keep.length>=8 && keep.length<wps.length){
+    try{ data = await osrmFetch(keep.map(p=>[p[0],p[1]])); }catch(e){}
+  }
+  let pts = data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+  pts = simplifyDP(pruneSpikes(pts), 5);
+  const route = {pts, meters:Math.round(buildCum(pts).slice(-1)[0]), snapped:true};
+  // 우회가 심하거나 도형에서 많이 벗어나면 그림이 깨진 것 → 도형 그대로의 코스 사용
+  const ideal = buildCum(shapeToWaypoints(lv)).slice(-1)[0];
+  const good = route.meters <= ideal*1.7 && shapeError(route, lv) <= 0.045;
+  const chosen = good ? route : fallbackRoute(lv);
+  try{ localStorage.setItem(key, JSON.stringify(chosen)); }catch(e){}
+  return chosen;
+}
+function fallbackRoute(lv){
+  const pts = shapeToWaypoints(lv);
+  const cum = buildCum(pts);
+  return {pts, meters:Math.round(cum[cum.length-1]), snapped:false};
+}
+
+/* ================= misc helpers ================= */
+function scalePts(pts){ return pts.map(([x,y])=>[8+x*0.84, 8+y*0.84]); }
+function ptsToD(pts){ return pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' '); }
+function geoProject(lines){
+  // 위경도 폴리라인들 → 미터 비율 유지하며 공통 스케일로 100x100 SVG에 투영
+  const all = lines.flat();
+  const lats = all.map(p=>p[0]), lngs = all.map(p=>p[1]);
+  const minLat=Math.min(...lats), maxLat=Math.max(...lats);
+  const minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
+  const midLat=(minLat+maxLat)/2;
+  const mPerLat=111320, mPerLng=111320*Math.cos(midLat*Math.PI/180);
+  const w=(maxLng-minLng)*mPerLng||1, h=(maxLat-minLat)*mPerLat||1;
+  const sc=84/Math.max(w,h);
+  const ox=(100-w*sc)/2, oy=(100-h*sc)/2;
+  const proj = p=>[ox+(p[1]-minLng)*mPerLng*sc, oy+(maxLat-p[0])*mPerLat*sc];
+  const ds = lines.map(pts=>pts.map((p,i)=>{
+    const [x,y]=proj(p);
+    return (i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);
+  }).join(' '));
+  return {ds, proj};
+}
+function routeToD(route){ return geoProject([route.pts]).ds[0]; }
+function fmtTime(sec){
+  sec = Math.floor(sec);
+  return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');
+}
+function fmtPace(secPerKm){
+  const m = Math.floor(secPerKm/60), s = Math.round(secPerKm%60);
+  return m+"'"+String(s).padStart(2,'0')+'"';
+}
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._tm);
+  t._tm = setTimeout(()=>t.classList.remove('show'), 2000);
+}
+
+/* ================= home map ================= */
+const NODE_GAP = 132, MAP_PAD_TOP = 70, MAP_PAD_BOTTOM = 40, SECTION_GAP = 84;
+// 코스는 이제 거리순 단일 목록이라 구간 구분이 없다
+const gapBefore = () => 0;
+function nodeXY(i){
+  const wrap = $('map-wrap');
+  const W = wrap.clientWidth || 380;
+  const last = LEVELS.length-1;
+  const H = MAP_PAD_TOP + MAP_PAD_BOTTOM + last*NODE_GAP + gapBefore(last);
+  const x = W/2 + Math.sin(i*1.25)*W*0.26;
+  const y = H - MAP_PAD_BOTTOM - (i*NODE_GAP + gapBefore(i));
+  return [x,y,H];
+}
+function renderHome(){
+  $('streak-val').textContent = save.streak;
+  $('stars-val').textContent = Object.values(save.stars).reduce((a,b)=>a+b,0);
+  $('km-val').textContent = (Math.round(save.totalKm*10)/10);
+
+  const wrap = $('map-wrap');
+  wrap.querySelectorAll('.node,.section-head').forEach(n=>n.remove());
+  const [,,H] = nodeXY(0);
+  wrap.style.height = H+'px';
+
+  const svg = $('map-svg');
+  svg.setAttribute('viewBox',`0 0 ${wrap.clientWidth} ${H}`);
+  let segs = '';
+  for(let i=0;i<LEVELS.length-1;i++){
+    const [x1,y1] = nodeXY(i), [x2,y2] = nodeXY(i+1);
+    const my = (y1+y2)/2;
+    const cleared = (i+1) < save.unlocked;
+    segs += `<path d="M${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}"
+      fill="none" stroke="${cleared?'#AFCFFB':'#E1E5E9'}" stroke-width="10"
+      stroke-linecap="round" ${cleared?'':'stroke-dasharray="1 18"'}/>`;
+  }
+  svg.innerHTML = segs;
+
+  LEVELS.forEach((lv,i)=>{
+    const [x,y] = nodeXY(i);
+    const cleared = lv.id < save.unlocked;
+    const current = lv.id === save.unlocked;
+    const locked = lv.id > save.unlocked;
+    const node = document.createElement('div');
+    node.className = 'node '+(cleared?'cleared':current?'current':'locked');
+    node.style.left = x+'px';
+    node.style.top = y+'px';
+    const st = save.stars[lv.id]||0;
+    node.innerHTML = `
+      <button class="node-btn">${locked?'':lv.emoji}
+        ${current?'<div class="start-bubble">여기부터 시작!</div>':''}
+      </button>
+      <div class="node-name">Lv.${lv.id} ${lv.name}</div>
+      <div class="node-area">${lv.area} · ${lv.km}km</div>
+      <div class="node-stars">${cleared? '★'.repeat(st)+'<span class="off">'+'★'.repeat(3-st)+'</span>' : ''}</div>`;
+    node.querySelector('.node-btn').classList.toggle('legend', lv.diff>=5);
+    node.querySelector('.node-btn').addEventListener('click',()=>{
+      if(locked){
+        node.classList.remove('shake'); void node.offsetWidth;
+        node.classList.add('shake');
+        toast('이전 레벨을 먼저 완주해야 열려요!');
+        return;
+      }
+      openSheet(lv);
+    });
+    wrap.appendChild(node);
+  });
+
+  requestAnimationFrame(()=>{
+    const idx = Math.min(save.unlocked-1, LEVELS.length-1);
+    const [,y] = nodeXY(idx);
+    const sc = $('home-scroll');
+    sc.scrollTop = y - sc.clientHeight*0.55 + 140;
+  });
+}
+
+/* ================= level sheet ================= */
+let sheetLevel = null, sheetRoute = null, sheetReqId = 0;
+function openSheet(lv){
+  sheetLevel = lv; sheetRoute = null;
+  const req = ++sheetReqId;
+  $('sheet-emoji').textContent = lv.emoji;
+  $('sheet-title').textContent = `Lv.${lv.id} ${lv.name}`;
+  $('sheet-desc').textContent = lv.desc;
+  $('sheet-loc').textContent = `${lv.area} · ${lv.gu}`;
+  $('sheet-real').style.display = lv.walkMin!=null ? 'inline-flex' : 'none';
+  if(lv.walkMin!=null) $('sheet-real').textContent =
+    `${lv.area.replace(' 일대','')}에서 도보 ${lv.walkMin<1 ? '1분 이내' : Math.round(lv.walkMin)+'분'}`;
+  $('sheet-diff').innerHTML = '●'.repeat(lv.diff)+'<span style="opacity:.2">'+'●'.repeat(5-lv.diff)+'</span>';
+  // 재현율 = 도형 외곽선 중 실제 코스로 그려지는 비율. 정확도(경로가 도형에서 벗어나지
+  // 않은 비율)와 겹침(IoU)은 따로 보여준다 — 한 숫자로 뭉뚱그리면 예전처럼 과장된다.
+  $('sheet-fit').textContent = lv.recall ? lv.recall+'%' : '-';
+  $('sheet-quality').textContent = lv.recall
+    ? `정확도 ${lv.precision}% · 겹침 ${lv.iou}% · 종합 ${lv.fit}점` : '';
+  $('sheet-km').textContent = '…';
+  $('sheet-time').textContent = '…';
+  const pts = scalePts(SHAPES[lv.shape]);
+  $('sheet-path').setAttribute('d', ptsToD(pts));
+  $('sheet-path').setAttribute('stroke','var(--neon)');
+  $('sheet-route').setAttribute('d','');
+  $('shape-legend').style.visibility = 'hidden';
+  $('sheet-start-dot').setAttribute('cx', pts[0][0]);
+  $('sheet-start-dot').setAttribute('cy', pts[0][1]);
+  const btn = $('btn-start');
+  btn.disabled = true;
+  btn.textContent = '실제 보행 코스 확인 중…';
+  $('dim').classList.add('show');
+  $('sheet').classList.add('show');
+
+  loadRoute(lv).catch(()=>fallbackRoute(lv)).then(route=>{
+    if(req !== sheetReqId) return;  // 다른 레벨을 연 경우 무시
+    sheetRoute = route;
+    $('sheet-km').textContent = (route.meters/1000).toFixed(1)+'km';
+    $('sheet-time').textContent = Math.round(route.meters/1000*PACE_SEC/60)+'분';
+    if(route.snapped){
+      // 실제 코스를 미리보기에 겹쳐 보여준다 (점선=목표 도형, 실선=실제 길)
+      const {ds, proj} = geoProject([shapeToWaypoints(lv,4), route.pts]);
+      $('sheet-path').setAttribute('d', ds[0]);
+      $('sheet-path').setAttribute('stroke','#5A6470');
+      $('sheet-route').setAttribute('d', ds[1]);
+      const [sx,sy] = proj(route.pts[0]);
+      $('sheet-start-dot').setAttribute('cx', sx);
+      $('sheet-start-dot').setAttribute('cy', sy);
+      $('shape-legend').style.visibility = 'visible';
+    }
+    btn.disabled = false;
+    btn.textContent = (save.stars[lv.id]? '다시 달리기' : '달리기 시작');
+    if(!route.snapped) toast('이 지역은 도형 그대로의 코스로 안내해요');
+  });
+}
+function closeSheet(){
+  $('dim').classList.remove('show');
+  $('sheet').classList.remove('show');
+}
+$('dim').addEventListener('click', closeSheet);
+$('btn-close-sheet').addEventListener('click', closeSheet);
+
+/* ================= leaflet ================= */
+let map, tileLayer, fullLine, glowLine, doneLine, traceLine, runnerMarker, startMarker;
+function ensureMap(){
+  if(map) return;
+  // zoomSnap 기본값(1)이면 fitBounds가 정수 줌으로 내림돼 코스가 화면에 작게 잡힌다
+  map = L.map('leaflet-map', {zoomControl:false, zoomSnap:0.25});
+  tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom:19, attribution:'&copy; OpenStreetMap &copy; CARTO'
+  }).addTo(map);
+}
+
+/* ================= run ================= */
+const run = {lv:null, route:null, cum:null, p:0, simTime:0, speed:32,
+             playing:false, raf:0, last:0, lastTracePct:0, msgIdx:0, totalSec:1};
+const MSGS = [
+  [0,   '출발! 서울 위에 나만의 그림을 그려요'],
+  [0.15,'좋아요, 리듬 타는 중'],
+  [0.35,'선이 살아나고 있어요'],
+  [0.5, '절반 완주! 지금 페이스 최고'],
+  [0.75,'거의 다 왔어요!'],
+  [0.92,'마지막 스퍼트!'],
+];
+
+$('btn-start').addEventListener('click', ()=>{
+  if(!sheetRoute) return;
+  closeSheet();
+  startRun(sheetLevel, sheetRoute);
+});
+
+function startRun(lv, route){
+  run.lv = lv; run.route = route;
+  run.cum = buildCum(route.pts);
+  run.totalSec = route.meters/1000*PACE_SEC;
+  run.p = 0; run.simTime = 0; run.playing = true; run.msgIdx = 0; run.lastTracePct = 0;
+
+  $('run-title-main').textContent = `${lv.emoji} ${lv.name} 그리기`;
+  $('run-title-area').textContent = `${lv.area} · ${(route.meters/1000).toFixed(1)}km`;
+  $('progress-fill').style.width = '0%';
+  $('progress-pct').textContent = '0%';
+  $('run-msg').textContent = MSGS[0][1];
+  $('btn-pause').textContent = '일시정지';
+
+  showScreen('screen-run');
+  ensureMap();
+  // 이전 레이어 제거
+  [fullLine, glowLine, doneLine, traceLine, runnerMarker, startMarker].forEach(l=>{ if(l) map.removeLayer(l); });
+  const latlngs = route.pts.map(p=>L.latLng(p[0],p[1]));
+  fullLine  = L.polyline(latlngs, {color:'rgba(255,255,255,.55)', weight:3, dashArray:'2 8', opacity:.9}).addTo(map);
+  traceLine = L.polyline([], {color:'#FFFFFF', weight:2, opacity:.28}).addTo(map);
+  glowLine  = L.polyline([], {color:'#EFFF3B', weight:13, opacity:.28}).addTo(map);
+  doneLine  = L.polyline([], {color:'#EFFF3B', weight:6, opacity:1}).addTo(map);
+  startMarker = L.marker(latlngs[0], {icon:L.divIcon({className:'',
+    html:'<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--blue);box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>',
+    iconSize:[14,14], iconAnchor:[7,7]})}).addTo(map);
+  runnerMarker = L.marker(latlngs[0], {icon:L.divIcon({
+    className:'', html:`<div class="runner-pin">${lv.emoji}</div>`, iconSize:[34,34], iconAnchor:[17,17]
+  }), zIndexOffset:1000}).addTo(map);
+
+  setTimeout(()=>{
+    map.invalidateSize();
+    map.fitBounds(fullLine.getBounds(), {padding:[26,26]});
+  }, 420);
+
+  run.last = performance.now();
+  cancelAnimationFrame(run.raf);
+  run.raf = requestAnimationFrame(tick);
+}
+
+function tick(now){
+  if(!run.playing){ run.last = now; run.raf = requestAnimationFrame(tick); return; }
+  const dt = Math.min((now-run.last)/1000, 5);
+  run.last = now;
+  run.simTime += dt*run.speed;
+  run.p = Math.min(run.simTime/run.totalSec, 1);
+
+  const meters = run.route.meters*run.p;
+  $('stat-time').textContent = fmtTime(run.simTime);
+  $('stat-dist').innerHTML = (meters/1000).toFixed(2)+'<small style="font-size:12px">km</small>';
+  const paceNoise = Math.sin(run.simTime/47)*14 + Math.sin(run.simTime/13)*6;
+  $('stat-pace').textContent = fmtPace(PACE_SEC+paceNoise);
+  const pct = Math.floor(run.p*100);
+  $('progress-fill').style.width = pct+'%';
+  $('progress-pct').textContent = pct+'%';
+
+  // 진행 경로 + 러너
+  const {pt, idx} = pointAtMeters(run.route.pts, run.cum, meters);
+  const done = run.route.pts.slice(0, idx+1).map(p=>L.latLng(p[0],p[1]));
+  done.push(L.latLng(pt[0],pt[1]));
+  glowLine.setLatLngs(done);
+  doneLine.setLatLngs(done);
+  runnerMarker.setLatLng([pt[0],pt[1]]);
+
+  // GPS 궤적 (실 GPS처럼 흔들리게, 프레임 점프 시 보간)
+  if(run.p - run.lastTracePct > 0.006){
+    for(let q = run.lastTracePct+0.006; q <= run.p; q += 0.006){
+      const s = pointAtMeters(run.route.pts, run.cum, run.route.meters*q).pt;
+      traceLine.addLatLng([s[0]+(Math.random()-0.5)*0.00006, s[1]+(Math.random()-0.5)*0.00006]);
+    }
+    run.lastTracePct = run.p;
+  }
+
+  while(run.msgIdx < MSGS.length-1 && run.p >= MSGS[run.msgIdx+1][0]){
+    run.msgIdx++;
+    $('run-msg').textContent = MSGS[run.msgIdx][1];
+  }
+
+  if(run.p >= 1){ finishRun(); return; }
+  run.raf = requestAnimationFrame(tick);
+}
+
+$('btn-pause').addEventListener('click', ()=>{
+  run.playing = !run.playing;
+  $('btn-pause').textContent = run.playing? '일시정지' : '계속 달리기';
+});
+$('btn-quit').addEventListener('click', ()=>{
+  if(confirm('러닝을 포기할까요? 그림이 사라져요')){
+    cancelAnimationFrame(run.raf);
+    showScreen('screen-home');
+  }
+});
+document.querySelectorAll('.speed-btn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('.speed-btn').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    run.speed = +b.dataset.speed;
+  });
+});
+
+/* ================= result ================= */
+function finishRun(){
+  cancelAnimationFrame(run.raf);
+  const lv = run.lv;
+  // 정확도 = 완성된 그림이 목표 도형과 얼마나 닮았는지.
+  // 코스 자체의 도형 재현율(lv.recall)이 상한이고, 달리기 중 GPS 흔들림만큼 깎인다.
+  const acc = Math.max(60, Math.min(99.9, (lv.recall||90) + Math.random()*4 - 2.5));
+  const stars = acc>=92?3 : acc>=85?2 : 1;
+  const firstClear = lv.id === save.unlocked;
+
+  save.stars[lv.id] = Math.max(save.stars[lv.id]||0, stars);
+  if(firstClear && save.unlocked < LEVELS.length+1) save.unlocked = lv.id+1;
+  save.totalKm += run.route.meters/1000;
+  save.streak += firstClear? 1:0;
+  persist();
+
+  $('result-emoji').textContent = lv.emoji;
+  $('result-title').textContent = `${lv.name} 완성!`;
+  $('result-sub').textContent = firstClear? '새로운 그림을 컬렉션에 추가했어요' : '기록에 다시 도전했어요';
+  $('result-cap').textContent = `${lv.area} · 실제 달린 경로`;
+  $('r-time').textContent = fmtTime(run.simTime);
+  $('r-dist').textContent = (run.route.meters/1000).toFixed(1)+'km';
+  $('r-pace').textContent = fmtPace(PACE_SEC);
+  $('r-acc').textContent = acc.toFixed(1)+'%';
+
+  const isLast = lv.id === LEVELS.length;
+  $('unlock-tag').style.display = firstClear && !isLast ? 'inline-flex':'none';
+  $('btn-next').textContent = isLast? '전체 코스 클리어!' : '다음 레벨 도전 →';
+
+  // 실제 스냅된 경로 모양을 그려주기
+  const rp = $('result-path');
+  rp.setAttribute('d', routeToD(run.route));
+  const L2 = rp.getTotalLength();
+  rp.style.transition = 'none';
+  rp.style.strokeDasharray = L2;
+  rp.style.strokeDashoffset = L2;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    rp.style.transition = 'stroke-dashoffset 1.6s ease-out .3s';
+    rp.style.strokeDashoffset = 0;
+  }));
+
+  const starEls = $('result-stars').querySelectorAll('span');
+  starEls.forEach(s=>s.classList.remove('lit'));
+  for(let i=0;i<stars;i++){
+    setTimeout(()=>starEls[i].classList.add('lit'), 500+i*350);
+  }
+
+  showScreen('screen-result');
+  confetti();
+}
+
+$('btn-home').addEventListener('click', ()=>{ renderHome(); showScreen('screen-home'); });
+$('btn-next').addEventListener('click', ()=>{
+  const nextLv = LEVELS.find(l=>l.id === run.lv.id+1);
+  renderHome();
+  showScreen('screen-home');
+  if(nextLv && nextLv.id <= save.unlocked){
+    setTimeout(()=>openSheet(nextLv), 450);
+  }else if(!nextLv){
+    setTimeout(()=>toast('새 코스를 준비 중이에요! 조금만 기다려주세요'), 450);
+  }
+});
+
+/* ================= misc ================= */
+function showScreen(id){
+  ['screen-home','screen-run','screen-result'].forEach(s=>{
+    $(s).classList.toggle('hidden', s!==id);
+  });
+}
+function confetti(){
+  const box = $('confetti');
+  box.innerHTML = '';
+  const colors = ['#3182F6','#FFC342','#00C471','#FF8A00','#F04452','#5AA2FF'];
+  for(let i=0;i<44;i++){
+    const el = document.createElement('i');
+    el.style.left = Math.random()*100+'%';
+    el.style.background = colors[i%colors.length];
+    el.style.animationDuration = (1.6+Math.random()*1.6)+'s';
+    el.style.animationDelay = (Math.random()*0.5)+'s';
+    box.appendChild(el);
+  }
+  setTimeout(()=>box.innerHTML='', 3800);
+}
+
+window.addEventListener('resize', renderHome);
+renderHome();
+</script>
+</body>
+</html>
